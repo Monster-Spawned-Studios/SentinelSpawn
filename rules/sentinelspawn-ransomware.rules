@@ -1,0 +1,14 @@
+# ================================================
+# Monster Spawned Studios - SentinelSpawn Ransomware Rules
+# ================================================
+
+# Common Ransomware File Extension Encryption Attempts
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"SentinelSpawn RANSOMWARE Possible Encryption Beacon"; flow:to_server; http.uri; content:".locked"; nocase; or content:".crypt"; nocase; or content:".encrypted"; nocase; classtype:trojan-activity; sid:1000200; rev:1;)
+
+# High Volume SMB / File Share Activity (WannaCry style)
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"SentinelSpawn RANSOMWARE SMB Lateral Spread"; flow:to_server,established; threshold:type both, track by_src, count 20, seconds 10; classtype:trojan-activity; sid:1000201; rev:1;)
+
+# Ransomware Callback Domains / IPs (generic patterns)
+alert dns $HOME_NET any -> any any (msg:"SentinelSpawn RANSOMWARE Suspicious Callback Domain"; dns.query; content:"ransom"; nocase; or content:"lock"; nocase; or content:"crypt"; nocase; classtype:trojan-activity; sid:1000202; rev:1;)
+
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"SentinelSpawn RANSOMWARE High Entropy Outbound Traffic"; flow:to_server; dsize:>500; threshold:type both, track by_src, count 15, seconds 60; classtype:trojan-activity; sid:1000203; rev:1;)

@@ -1,0 +1,237 @@
+name: sentinelspawn-server
+
+services:
+  # Suricata - Network Intrusion Detection System (NIDS)
+  # Captures packets on host interface, detects breaches, scans, DoS attempts, exploits, brute force, malware C2, etc.
+  # Uses Emerging Threats (ET) Open rules by default for comprehensive coverage.
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: suricata
+    network_mode: host
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+      - SYS_NICE
+    volumes:
+      - ./config/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./rules:/var/lib/suricata/rules
+      - ./logs:/var/log/suricata
+      - /etc/localtime:/etc/localtime:ro
+    command: [ "-c", "/etc/suricata/suricata.yaml", "-i", "eth0" ] # CHANGE 'eth0' to your monitoring interface (run 'ip link' or 'ip a' to find, e.g. enp3s0, wlan0)
+    restart: unless-stopped
+    depends_on:
+      - evebox
+
+  # EveBox - Web dashboard for Suricata alerts
+  # Real-time view, search, filtering, alert management, suppression of false positives.
+  # SQLite backend for simplicity (no heavy Elasticsearch needed initially).
+  evebox:
+    image: jasonish/evebox:latest
+    container_name: evebox
+    ports:
+      - "5636:5636" # Internal access only; exposed securely via Cloudflare Tunnel
+    volumes:
+      - ./logs:/var/log/suricata:ro
+      - evebox-data:/var/lib/evebox
+      - geoip-data:/usr/share/GeoIP:ro # GeoIP databases for dashboard enrichment (country/city)
+    command: >
+      evebox server --datastore sqlite --input /var/log/suricata/eve.json --host 0.0.0.0 --port 5636 -D /var/lib/evebox
+    restart: unless-stopped
+
+  # Cloudflare Tunnel - Secure remote access to EveBox dashboard (and future services)
+  # No open ports on your router/firewall. Cloudflare provides DDoS protection, zero-trust policies if desired.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN} # Set in .env file (get from Cloudflare Zero Trust > Tunnels)
+    networks:
+      - default
+
+  # Notifier - Sends alerts to Discord and Email using Apprise
+  # Monitors eve.json for new alerts (breach attempts, DoS, etc.) and notifies in real-time.
+  # Filters to reduce noise; customize in watcher.py.
+  notifier:
+    image: python:3.12-slim
+    container_name: notifier
+    volumes:
+      - ./notifier:/app
+      - ./logs:/var/log/suricata:ro
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir apprise watchdog &&
+             python watcher.py"
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - suricata
+
+  # Prometheus + Grafana Metrics Stack
+  suricata-exporter:
+    image: python:3.12-slim
+    container_name: suricata-exporter
+    volumes:
+      - ./notifier:/app
+      - ./logs:/var/log/suricata:ro
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir prometheus-client &&
+             python suricata-metrics-exporter.py"
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    depends_on:
+      - suricata
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-rules.yml:/etc/prometheus/rules/suricata.rules:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    depends_on:
+      - suricata-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/MSS_LOGO.png:/usr/share/grafana/public/img/fav32.png:ro
+      - ./grafana/MSS_LOGO.png:/usr/share/grafana/public/img/fav16.png:ro
+      - ./grafana/MSS_LOGO.png:/usr/share/grafana/public/img/apple-touch-icon.png:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123 # Change this in production!
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - ENABLE_GEOIP_MAP=${ENABLE_GEOIP_MAP:-false}
+    command: >
+      sh -c "
+        if [ \"\${ENABLE_GEOIP_MAP}\" = \"true\" ]; then
+          cp /etc/grafana/provisioning/dashboards/suricata-dashboard-geoip.json /etc/grafana/provisioning/dashboards/suricata-dashboard.json
+          echo 'GeoIP World Map enabled'
+        else
+          cp /etc/grafana/provisioning/dashboards/suricata-dashboard.json /etc/grafana/provisioning/dashboards/suricata-dashboard.json 2>/dev/null || true
+          echo 'GeoIP World Map disabled (default)'
+        fi
+        /run.sh
+      "
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # ============================================
+  # NEW SERVICES FOR ENHANCED FEATURES
+  # ============================================
+
+  # GeoIP Database Updater (MaxMind GeoLite2)
+  # Automatically downloads GeoIP databases if GEOIP_CONSENT=true and credentials provided.
+  # Mounts .mmdb files to EveBox for enriched dashboard (country/city for alerts).
+  # Consent required per MaxMind terms: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
+  # Set GEOIP_CONSENT=true ONLY after reading and accepting the terms.
+  geoip-updater:
+    image: maxmind/geoipupdate:latest
+    container_name: geoip-updater
+    restart: unless-stopped
+    environment:
+      - GEOIPUPDATE_EDITION_IDS=GeoLite2-City,GeoLite2-Country
+      - GEOIPUPDATE_FREQUENCY=168 # Update weekly (in hours)
+      - GEOIPUPDATE_VERBOSE=1
+      # Only update the following if you are willing to abide by the MaxMind terms of service
+      - GEOIP_CONSENT=${GEOIP_CONSENT:-false}
+      - MAXMIND_ACCOUNT_ID=${MAXMIND_ACCOUNT_ID:-}
+      - MAXMIND_LICENSE_KEY=${MAXMIND_LICENSE_KEY:-}
+    volumes:
+      - geoip-data:/usr/share/GeoIP
+    # Starts automatically. Downloads/updates GeoIP databases weekly ONLY if you set
+    # GEOIP_CONSENT=true + provide MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY in .env
+    # (after accepting MaxMind terms of service). Otherwise it exits cleanly with a warning.
+
+    # Log Cleaner - Automatically deletes logs older than 30 days
+    # Prevents disk from filling up. Runs daily cleanup on ./logs volume.
+  log-cleaner:
+    image: alpine:latest
+    container_name: log-cleaner
+    restart: unless-stopped
+    volumes:
+      - ./logs:/logs
+    command: >
+      sh -c "
+        apk add --no-cache findutils coreutils &&
+        while true; do
+          echo 'Cleaning logs older than 30 days...';
+          find /logs -type f -mtime +30 -delete 2>/dev/null || true;
+          find /logs -type d -empty -delete 2>/dev/null || true;
+          sleep 86400;
+        done
+      "
+    depends_on:
+      - suricata
+
+  # Enhanced Notifier now supports NTFY + VirusTotal links (see watcher.py)
+
+  # banIP Auto-Blocker — Automatically adds malicious IPs from Suricata alerts to OpenWRT banIP
+  # Requires: OpenWRT with banIP installed + SSH key auth (see banip-updater.py and README)
+  banip-updater:
+    image: python:3.12-slim
+    container_name: banip-updater
+    volumes:
+      - ./notifier:/app
+      - ./logs:/var/log/suricata:ro
+      - ./ssh-keys:/app/ssh-keys:ro # Mount your OpenWRT SSH private key here (chmod 600)
+    working_dir: /app
+    command: >
+            sh -c "pip install --no-cache-dir paramiko && python banip-updater.py"
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - suricata
+
+  # AdGuard Home Integration (optional)
+  # See README for instructions on forwarding AdGuard Home query logs or using its API
+  # Example: Mount AdGuard Home data volume and forward blocked queries as additional alerts
+
+  # C2 Domain Auto-Blocker — Automatically adds Suricata-detected C2/malware domains to AdGuard Home
+  c2-blocker:
+    image: python:3.12-slim
+    container_name: c2-blocker
+    volumes:
+      - ./notifier:/app
+      - ./logs:/var/log/suricata:ro
+    working_dir: /app
+    command: >
+            sh -c "pip install --no-cache-dir requests && python c2-blocker.py"
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - suricata
+
+volumes:
+  evebox-data:
+    name: evebox-data
+  geoip-data:
+    name: geoip-data
+  prometheus-data:
+    name: prometheus-data
+  grafana-data:
+    name: grafana-data
+
+networks:
+  default:
+    driver: bridge

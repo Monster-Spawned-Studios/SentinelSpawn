@@ -1,0 +1,15 @@
+# ================================================
+# Monster Spawned Studios - SentinelSpawn Lateral Movement Rules
+# ================================================
+
+# Internal Network Scanning (after initial breach)
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"SentinelSpawn LATERAL Internal Port Scan"; flow:to_server; flags:S; threshold:type both, track by_src, count 30, seconds 20; classtype:attempted-recon; sid:1000300; rev:1;)
+
+# Suspicious RDP / WinRM / WMI Activity
+alert tcp $HOME_NET any -> $HOME_NET [3389,5985,5986] (msg:"SentinelSpawn LATERAL RDP / WinRM Access Attempt"; flow:to_server; classtype:attempted-recon; sid:1000301; rev:1;)
+
+# Pass-the-Hash / Credential Dumping Patterns
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"SentinelSpawn LATERAL SMB NTLM Relay Attempt"; flow:to_server; content:"NTLMSSP"; nocase; classtype:attempted-recon; sid:1000302; rev:1;)
+
+# Unusual Internal-to-Internal DNS Queries
+alert dns $HOME_NET any -> $HOME_NET any (msg:"SentinelSpawn LATERAL Internal DNS Exfil / Recon"; dns.query; bsize:>60; classtype:attempted-recon; sid:1000303; rev:1;)

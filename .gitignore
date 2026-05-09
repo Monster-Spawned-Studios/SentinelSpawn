@@ -1,0 +1,14 @@
+# Visual Studio Code
+.vscode/*
+!.vscode/cspell.json
+
+# Environment variables
+.env
+
+# Logs
+logs/
+!logs/.gitkeep
+
+# SSH keys
+ssh-keys/*
+!ssh-keys/.gitkeep

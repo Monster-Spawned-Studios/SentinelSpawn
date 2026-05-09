@@ -1,0 +1,119 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "suricata-main-v4",
+    "title": "Monster Spawned Studios - SentinelSpawn",
+    "tags": ["suricata", "security", "ids", "http", "dns", "geoip"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 4,
+    "refresh": "10s",
+    "panels": [
+      {
+        "type": "stat",
+        "title": "Total Alerts (24h)",
+        "targets": [{"expr": "sum(increase(suricata_alerts_total[24h]))", "legendFormat": "Alerts"}],
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green"}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}},
+        "gridPos": {"h": 3, "w": 3, "x": 0, "y": 0}
+      },
+      {
+        "type": "stat",
+        "title": "Critical Alerts",
+        "targets": [{"expr": "sum(increase(suricata_alerts_total{severity=\"1\"}[24h]))", "legendFormat": "Critical"}],
+        "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "red"}]}}},
+        "gridPos": {"h": 3, "w": 3, "x": 3, "y": 0}
+      },
+      {
+        "type": "stat",
+        "title": "Alerts/sec",
+        "targets": [{"expr": "sum(rate(suricata_alerts_total[5m]))", "legendFormat": "Rate"}],
+        "gridPos": {"h": 3, "w": 3, "x": 6, "y": 0}
+      },
+      {
+        "type": "stat",
+        "title": "Unique Attackers (24h)",
+        "targets": [{"expr": "count(count by (src_ip) (increase(suricata_alerts_by_src_ip[24h]) > 0))", "legendFormat": "Sources"}],
+        "gridPos": {"h": 3, "w": 3, "x": 9, "y": 0}
+      },
+      {
+        "type": "graph",
+        "title": "Alerts Over Time",
+        "targets": [{"expr": "sum(rate(suricata_alerts_total[5m]))", "legendFormat": "Alerts/sec"}],
+        "gridPos": {"h": 7, "w": 12, "x": 0, "y": 3}
+      },
+      {
+        "type": "piechart",
+        "title": "Alerts by Category",
+        "targets": [{"expr": "sum by (category) (increase(suricata_alerts_total[1h]))", "legendFormat": "{{category}}"}],
+        "gridPos": {"h": 7, "w": 12, "x": 12, "y": 3}
+      },
+      {
+        "type": "bargauge",
+        "title": "Top 10 Source IPs",
+        "targets": [{"expr": "topk(10, sum by (src_ip) (increase(suricata_alerts_by_src_ip[1h])))", "legendFormat": "{{src_ip}}"}],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10}
+      },
+      {
+        "type": "bargauge",
+        "title": "Top 10 Destination IPs",
+        "targets": [{"expr": "topk(10, sum by (dest_ip) (increase(suricata_alerts_by_dest_ip[1h])))", "legendFormat": "{{dest_ip}}"}],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10}
+      },
+      {
+        "type": "piechart",
+        "title": "Protocol Breakdown",
+        "targets": [{"expr": "sum by (proto) (increase(suricata_events_by_proto[1h]))", "legendFormat": "{{proto}}"}],
+        "gridPos": {"h": 7, "w": 6, "x": 0, "y": 18}
+      },
+      {
+        "type": "piechart",
+        "title": "HTTP Methods",
+        "targets": [{"expr": "sum by (method) (increase(suricata_http_methods_total[1h]))", "legendFormat": "{{method}}"}],
+        "gridPos": {"h": 7, "w": 6, "x": 6, "y": 18}
+      },
+      {
+        "type": "piechart",
+        "title": "HTTP Status Codes",
+        "targets": [{"expr": "sum by (status) (increase(suricata_http_status_codes_total[1h]))", "legendFormat": "{{status}}"}],
+        "gridPos": {"h": 7, "w": 6, "x": 12, "y": 18}
+      },
+      {
+        "type": "piechart",
+        "title": "DNS Query Types",
+        "targets": [{"expr": "sum by (qtype) (increase(suricata_dns_query_types_total[1h]))", "legendFormat": "{{qtype}}"}],
+        "gridPos": {"h": 7, "w": 6, "x": 18, "y": 18}
+      },
+      {
+        "type": "bargauge",
+        "title": "Top 10 Domains (HTTP)",
+        "targets": [{"expr": "topk(10, sum by (domain) (increase(suricata_http_domains_total[1h])))", "legendFormat": "{{domain}}"}],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 25}
+      },
+      {
+        "type": "table",
+        "title": "Top User-Agents (Last Hour)",
+        "targets": [{"expr": "topk(10, sum by (user_agent) (increase(suricata_http_user_agents_total[1h])))", "legendFormat": "{{user_agent}}"}],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 25}
+      },
+      {
+        "type": "table",
+        "title": "Top 15 Signatures",
+        "targets": [{"expr": "topk(15, sum by (signature) (increase(suricata_alerts_total[1h])))", "legendFormat": "{{signature}}"}],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 33}
+      },
+      {
+        "type": "text",
+        "title": "World Map (GeoIP)",
+        "options": {"content": "**GeoIP World Map**\n\nTo enable a full interactive world map:\n\n1. Install the **Worldmap Panel** plugin in Grafana (Plugins → Worldmap Panel).\n2. Add a new panel of type **Worldmap**.\n3. Use query: `sum by (country) (increase(suricata_alerts_by_country[1h]))`\n4. Set `country` as the location data (using country code or name).\n\n**Considerations**:\n- Requires GeoIP to be enabled in Suricata (already done in this stack).\n- Higher cardinality if many countries.\n- Good for visualizing global attack sources.\n\nWould you like me to enable this fully?"},
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": 41}
+      },
+      {
+        "type": "text",
+        "title": "Footer",
+        "options": {"content": "**Powered by Monster Spawned Studios - Copyright © 2026**"},
+        "gridPos": {"h": 2, "w": 24, "x": 0, "y": 47}
+      }
+    ]
+  },
+  "overwrite": true
+}

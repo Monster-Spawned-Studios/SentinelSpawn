@@ -1,0 +1,26 @@
+{
+    "version": "0.2",
+    "allowCompoundWords": false,
+    "useGitignore": true,
+    "caseSensitive": false,
+    "description": "Custom dictionary for SentinelSpawn Server",
+    "words": [
+        "banip",
+        "cloudflared",
+        "coreutils",
+        "evebox",
+        "findutils",
+        "geoip",
+        "geoipupdate",
+        "jasonish",
+        "localtime",
+        "maxmind",
+        "mmdb",
+        "NIDS",
+        "NTFY",
+        "paramiko",
+        "sentinelspawn",
+        "suricata",
+        "wlan"
+    ]
+}
