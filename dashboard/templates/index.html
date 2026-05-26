@@ -104,8 +104,8 @@
                             <tbody>
                                 {% for alert in recent_alerts %}
                                 <tr class="alert-row">
-                                    <td>{{ alert.time[:19] }}</td>
-                                    <td>{{ alert.signature[:60] }}{% if alert.signature|length > 60 %}...{% endif %}</td>
+                                    <td>{{ alert.time }}</td>
+                                    <td>{{ alert.signature }}</td>
                                     <td>{{ alert.src_ip }}</td>
                                     <td>{{ alert.dest_ip }}</td>
                                 </tr>

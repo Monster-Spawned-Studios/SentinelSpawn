@@ -8,10 +8,11 @@
 <body>
     <h1>MFA Verification</h1>
     <p>User: {{ username }}</p>
-    {% if error %}<p>{{ error }}</p>{% endif %}
+    {% if error %}<p role="alert" aria-live="polite">{{ error }}</p>{% endif %}
     <form method="post" action="/login/mfa">
         <input type="hidden" name="challenge_id" value="{{ challenge_id }}">
-        <label>TOTP Code <input type="text" name="totp_code" required></label><br>
+        <label for="totp_code">TOTP Code</label>
+        <input id="totp_code" type="text" name="totp_code" required><br>
         <button type="submit">Sign in</button>
     </form>
 </body>

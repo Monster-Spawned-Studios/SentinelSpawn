@@ -15,6 +15,8 @@ from auth import AuthManager
 app = FastAPI(title="SentinelSpawn Command Center")
 templates = Jinja2Templates(directory="templates")
 auth = AuthManager()
+ALERT_TIME_DISPLAY_LENGTH = 19
+ALERT_SIGNATURE_DISPLAY_LENGTH = 60
 
 # Mount static files
 static_dir = Path("static")
@@ -171,9 +173,12 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
                 try:
                     event = json.loads(line)
                     if event.get("event_type") == "alert":
+                        signature = event.get("alert", {}).get("signature", "Unknown")
+                        if len(signature) > ALERT_SIGNATURE_DISPLAY_LENGTH:
+                            signature = signature[:ALERT_SIGNATURE_DISPLAY_LENGTH] + "..."
                         recent_alerts.append({
-                            "time": event.get("timestamp", "")[:19],
-                            "signature": event.get("alert", {}).get("signature", "Unknown"),
+                            "time": event.get("timestamp", "")[:ALERT_TIME_DISPLAY_LENGTH],
+                            "signature": signature,
                             "src_ip": event.get("src_ip", "N/A"),
                             "dest_ip": event.get("dest_ip", "N/A")
                         })
@@ -229,7 +234,9 @@ async def change_password_post(
         })
 
     auth.change_password(user["username"], new_password)
-    user["requires_password_change"] = False
+    session_id = request.cookies.get("session_id")
+    if session_id and session_id in auth.sessions:
+        auth.sessions[session_id]["requires_password_change"] = False
     return RedirectResponse("/dashboard", status_code=302)
 
 
