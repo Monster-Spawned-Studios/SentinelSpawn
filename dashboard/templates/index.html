@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelSpawn • Command Center</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; }
+        .card { background-color: #1e2937 !important; }
+        .nav-wrapper { background-color: #1e40af; }
+        .stat-number { font-size: 2.5rem; font-weight: 700; color: #60a5fa; }
+        .alert-row { border-left: 4px solid #ef4444; }
+        .header { font-family: 'Roboto', sans-serif; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-wrapper">
+            <a href="#" class="brand-logo center">SentinelSpawn</a>
+            <ul class="right">
+                <li><a href="#">Refresh</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container" style="margin-top: 30px;">
+        <h4 class="header center-align blue-text text-lighten-2">Network Security & Privacy Command Center</h4>
+        <p class="center-align grey-text">Real-time overview • Last updated: {{ now }}</p>
+
+        <!-- Stats Row -->
+        <div class="row">
+            <div class="col s12 m4">
+                <div class="card">
+                    <div class="card-content center-align">
+                        <i class="material-icons large blue-text">block</i>
+                        <p class="stat-number">{{ stats.total_blocks | default(0) }}</p>
+                        <p class="grey-text">Items Blocked (C2/IP)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col s12 m4">
+                <div class="card">
+                    <div class="card-content center-align">
+                        <i class="material-icons large teal-text">dns</i>
+                        <p class="stat-number">{{ adguard.dns_queries | default(0) }}</p>
+                        <p class="grey-text">DNS Queries (AdGuard)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col s12 m4">
+                <div class="card">
+                    <div class="card-content center-align">
+                        <i class="material-icons large purple-text">shield</i>
+                        <p class="stat-number">{{ adguard.blocked | default(0) }}</p>
+                        <p class="grey-text">Blocked by AdGuard</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WireGuard & C2 Stats -->
+        <div class="row">
+            <div class="col s12 m6">
+                <div class="card">
+                    <div class="card-content">
+                        <span class="card-title">WireGuard VPN</span>
+                        <p><strong>Active Peers:</strong> {{ wg_peers }}</p>
+                        <p class="grey-text">All traffic is encrypted. ISP cannot inspect content.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col s12 m6">
+                <div class="card">
+                    <div class="card-content">
+                        <span class="card-title">C2 Blocker Statistics</span>
+                        <ul class="collection">
+                            <li class="collection-item">Domains Blocked: <strong>{{ stats.domains_blocked | default(0) }}</strong></li>
+                            <li class="collection-item">IPs Blocked: <strong>{{ stats.ips_blocked | default(0) }}</strong></li>
+                            <li class="collection-item">Last Block: <strong>{{ stats.last_block_time | default('Never') }}</strong></li>
+                            <li class="collection-item">Last Item: <strong>{{ stats.last_blocked_item | default('None') }}</strong></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Alerts -->
+        <div class="row">
+            <div class="col s12">
+                <div class="card">
+                    <div class="card-content">
+                        <span class="card-title">Recent Suricata Alerts</span>
+                        <table class="striped highlight">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Signature</th>
+                                    <th>Source IP</th>
+                                    <th>Destination IP</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in recent_alerts %}
+                                <tr class="alert-row">
+                                    <td>{{ alert.time[:19] }}</td>
+                                    <td>{{ alert.signature[:60] }}{% if alert.signature|length > 60 %}...{% endif %}</td>
+                                    <td>{{ alert.src_ip }}</td>
+                                    <td>{{ alert.dest_ip }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="center-align grey-text" style="margin-top: 40px; font-size: 0.9rem;">
+            SentinelSpawn • Open Source Network Security &amp; Privacy Stack
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            M.AutoInit();
+            // Auto-refresh every 30 seconds
+            setTimeout(() => location.reload(), 30000);
+        });
+    </script>
+</body>
+</html>
