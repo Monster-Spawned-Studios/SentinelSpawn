@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MFA Verification</title>
+</head>
+<body>
+    <h1>MFA Verification</h1>
+    <p>User: {{ username }}</p>
+    {% if error %}<p role="alert" aria-live="polite">{{ error }}</p>{% endif %}
+    <form method="post" action="/login/mfa">
+        <input type="hidden" name="challenge_id" value="{{ challenge_id }}">
+        <label for="totp_code">TOTP Code</label>
+        <input id="totp_code" type="text" name="totp_code" required><br>
+        <button type="submit">Sign in</button>
+    </form>
+</body>
+</html>
