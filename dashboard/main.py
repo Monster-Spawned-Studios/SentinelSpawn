@@ -149,7 +149,7 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
     if stats_file.exists():
         try:
             stats = json.loads(stats_file.read_text())
-        except:
+        except Exception:
             pass
 
     adguard_stats = {"blocked": 0, "dns_queries": 0}
@@ -159,7 +159,7 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
             data = r.json()
             adguard_stats["blocked"] = data.get("num_blocked_filtered", 0)
             adguard_stats["dns_queries"] = data.get("num_dns_queries", 0)
-    except:
+    except Exception:
         pass
 
     recent_alerts = []
@@ -173,20 +173,20 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
                     if event.get("event_type") == "alert":
                         recent_alerts.append({
                             "time": event.get("timestamp", "")[:19],
-                            "signature": event.get("alert", {}).get("signature", "Unknown")[:50],
+                            "signature": event.get("alert", {}).get("signature", "Unknown"),
                             "src_ip": event.get("src_ip", "N/A"),
                             "dest_ip": event.get("dest_ip", "N/A")
                         })
-                except:
+                except Exception:
                     continue
-    except:
+    except Exception:
         pass
 
     wg_peers = 0
     try:
         result = subprocess.run(["wg", "show"], capture_output=True, text=True, timeout=3)
         wg_peers = len([l for l in result.stdout.splitlines() if "peer" in l.lower()])
-    except:
+    except Exception:
         pass
 
     return templates.TemplateResponse("index.html", {
