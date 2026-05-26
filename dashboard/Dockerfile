@@ -2,10 +2,16 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi uvicorn jinja2 requests
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wireguard-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir fastapi uvicorn jinja2 requests bcrypt pyotp cryptography
 
 COPY dashboard/main.py .
+COPY dashboard/auth.py .
 COPY dashboard/templates ./templates
+COPY dashboard/static ./static
 
 EXPOSE 8080
 

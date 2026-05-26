@@ -7,10 +7,9 @@ Supports first-login password change and user management.
 import sqlite3
 import bcrypt
 import pyotp
-import secrets
 from cryptography.fernet import Fernet
 from pathlib import Path
-import json
+import os
 from datetime import datetime
 from typing import Optional, Dict, List
 
@@ -22,22 +21,19 @@ class AuthManager:
         self.db_path = DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
-        self.secret_key = self._load_or_generate_key()
+        self.secret_key = self._load_secret_key()
         self.sessions = {}
+        self.pending_mfa = {}
 
-    def _load_or_generate_key(self) -> bytes:
-        env_path = Path("/app/.env")
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                if line.startswith(f"{SECRET_KEY_ENV}="):
-                    key = line.split("=", 1)[1].strip()
-                    if key and len(key) > 20:
-                        return key.encode()
-        key = Fernet.generate_key()
-        with open(env_path, "a") as f:
-            f.write(f"\n{SECRET_KEY_ENV}={key.decode()}\n")
-        print("⚠️  Generated new SECRET_KEY and saved to .env. Keep it safe!")
-        return key
+    def _load_secret_key(self) -> bytes:
+        key = os.environ.get(SECRET_KEY_ENV, "").strip()
+        if not key:
+            raise ValueError(f"{SECRET_KEY_ENV} must be set")
+        try:
+            Fernet(key.encode())
+        except Exception as exc:
+            raise ValueError(f"{SECRET_KEY_ENV} is invalid") from exc
+        return key.encode()
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
@@ -81,7 +77,13 @@ class AuthManager:
             result = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             return result > 0
 
-    def verify_login(self, username: str, password: str, totp_code: str) -> Dict:
+    def has_admin(self) -> bool:
+        return self.has_users()
+
+    def create_admin(self, username: str, password: str) -> str:
+        return self.create_first_admin(username, password)
+
+    def verify_password(self, username: str, password: str) -> Optional[Dict]:
         with sqlite3.connect(self.db_path) as conn:
             row = conn.execute(
                 "SELECT id, password_hash, totp_secret_encrypted, requires_password_change FROM users WHERE username = ?",
@@ -95,20 +97,10 @@ class AuthManager:
             if not bcrypt.checkpw(password.encode(), password_hash):
                 return None
 
-            f = Fernet(self.secret_key)
             try:
-                totp_secret = f.decrypt(encrypted_secret).decode()
-                if not pyotp.TOTP(totp_secret).verify(totp_code):
-                    return None
-            except:
+                Fernet(self.secret_key).decrypt(encrypted_secret)
+            except Exception:
                 return None
-
-            # Update last login
-            conn.execute(
-                "UPDATE users SET last_login = ? WHERE id = ?",
-                (datetime.utcnow().isoformat(), user_id)
-            )
-            conn.commit()
 
             return {
                 "user_id": user_id,
@@ -116,6 +108,38 @@ class AuthManager:
                 "requires_password_change": bool(requires_change),
                 "is_admin": True  # For this version we assume single admin
             }
+
+    def verify_totp(self, username: str, totp_code: str) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT id, totp_secret_encrypted FROM users WHERE username = ?",
+                (username,)
+            ).fetchone()
+            if not row:
+                return False
+            user_id, encrypted_secret = row
+
+            try:
+                totp_secret = Fernet(self.secret_key).decrypt(encrypted_secret).decode()
+                if not pyotp.TOTP(totp_secret).verify(totp_code):
+                    return False
+            except Exception:
+                return False
+
+            conn.execute(
+                "UPDATE users SET last_login = ? WHERE id = ?",
+                (datetime.utcnow().isoformat(), user_id)
+            )
+            conn.commit()
+            return True
+
+    def verify_login(self, username: str, password: str, totp_code: str) -> Optional[Dict]:
+        user = self.verify_password(username, password)
+        if not user:
+            return None
+        if not self.verify_totp(username, totp_code):
+            return None
+        return user
 
     def change_password(self, username: str, new_password: str):
         password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt())

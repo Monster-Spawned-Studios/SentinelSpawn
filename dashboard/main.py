@@ -8,7 +8,8 @@ from pathlib import Path
 import json
 import requests
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
+import secrets
 from auth import AuthManager
 
 app = FastAPI(title="SentinelSpawn Command Center")
@@ -16,13 +17,33 @@ templates = Jinja2Templates(directory="templates")
 auth = AuthManager()
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+static_dir = Path("static")
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+def _is_secure_request(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+    return request.url.scheme == "https" or forwarded_proto == "https"
+
+
+def _clear_expired_sessions() -> None:
+    now = datetime.utcnow()
+    for session_id, session in list(auth.sessions.items()):
+        if session.get("expires_at", now) <= now:
+            auth.sessions.pop(session_id, None)
+    for challenge_id, challenge in list(auth.pending_mfa.items()):
+        if challenge.get("expires_at", now) <= now:
+            auth.pending_mfa.pop(challenge_id, None)
+
 
 def get_current_user(request: Request):
+    _clear_expired_sessions()
     session_id = request.cookies.get("session_id")
-    if not session_id or session_id not in auth.sessions:
+    session = auth.sessions.get(session_id) if session_id else None
+    if not session:
         raise HTTPException(status_code=302, headers={"Location": "/login"})
-    return auth.sessions[session_id]
+    return session
 
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_page(request: Request):
@@ -66,36 +87,63 @@ async def login_post(
     username: str = Form(...),
     password: str = Form(...)
 ):
-    # First stage: username + password. MFA on next page.
-    # For simplicity we do full verification on /mfa
+    user = auth.verify_password(username, password)
+    if not user:
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Invalid username or password"
+        })
+
+    challenge_id = secrets.token_urlsafe(32)
+    auth.pending_mfa[challenge_id] = {
+        "username": user["username"],
+        "requires_password_change": user["requires_password_change"],
+        "expires_at": datetime.utcnow() + timedelta(minutes=5)
+    }
     return templates.TemplateResponse("mfa.html", {
         "request": request,
-        "username": username,
-        "password": password  # passed temporarily for verification (not stored)
+        "username": user["username"],
+        "challenge_id": challenge_id
     })
 
 @app.post("/login/mfa")
 async def mfa_verify(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
+    challenge_id: str = Form(...),
     totp_code: str = Form(...)
 ):
-    if auth.verify_login(username, password, totp_code):
+    _clear_expired_sessions()
+    challenge = auth.pending_mfa.get(challenge_id)
+    if challenge and auth.verify_totp(challenge["username"], totp_code):
+        auth.pending_mfa.pop(challenge_id, None)
         session_id = secrets.token_urlsafe(32)
-        auth.sessions[session_id] = username
+        auth.sessions[session_id] = {
+            "username": challenge["username"],
+            "requires_password_change": challenge["requires_password_change"],
+            "expires_at": datetime.utcnow() + timedelta(hours=1)
+        }
         response = RedirectResponse("/dashboard", status_code=302)
-        response.set_cookie(key="session_id", value=session_id, httponly=True, max_age=3600)
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            max_age=3600,
+            secure=_is_secure_request(request),
+            samesite="lax",
+        )
         return response
     return templates.TemplateResponse("mfa.html", {
         "request": request,
-        "username": username,
-        "password": password,
+        "username": challenge["username"] if challenge else "",
+        "challenge_id": challenge_id,
         "error": "Invalid credentials or TOTP code"
     })
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, user: str = Depends(get_current_user)):
+async def dashboard(request: Request, user: dict = Depends(get_current_user)):
+    if user.get("requires_password_change"):
+        return RedirectResponse("/change-password", status_code=302)
+
     stats = {}
     stats_file = Path("/app/notifier/stats.json")
     if stats_file.exists():
@@ -143,7 +191,7 @@ async def dashboard(request: Request, user: str = Depends(get_current_user)):
 
     return templates.TemplateResponse("index.html", {
         "request": request,
-        "user": user,
+        "user": user["username"],
         "stats": stats,
         "adguard": adguard_stats,
         "recent_alerts": recent_alerts[:12],
@@ -151,8 +199,45 @@ async def dashboard(request: Request, user: str = Depends(get_current_user)):
         "now": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     })
 
+
+@app.get("/change-password", response_class=HTMLResponse)
+async def change_password_page(request: Request, user: dict = Depends(get_current_user)):
+    return templates.TemplateResponse("change_password.html", {
+        "request": request,
+        "user": user["username"]
+    })
+
+
+@app.post("/change-password")
+async def change_password_post(
+    request: Request,
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    user: dict = Depends(get_current_user)
+):
+    if new_password != confirm_password:
+        return templates.TemplateResponse("change_password.html", {
+            "request": request,
+            "user": user["username"],
+            "error": "Passwords do not match"
+        })
+    if len(new_password) < 12:
+        return templates.TemplateResponse("change_password.html", {
+            "request": request,
+            "user": user["username"],
+            "error": "Password must be at least 12 characters"
+        })
+
+    auth.change_password(user["username"], new_password)
+    user["requires_password_change"] = False
+    return RedirectResponse("/dashboard", status_code=302)
+
+
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
+    session_id = request.cookies.get("session_id")
+    if session_id:
+        auth.sessions.pop(session_id, None)
     response = RedirectResponse("/login")
     response.delete_cookie("session_id")
     return response
