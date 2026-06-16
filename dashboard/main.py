@@ -47,6 +47,12 @@ def get_current_user(request: Request):
         raise HTTPException(status_code=302, headers={"Location": "/login"})
     return session
 
+@app.get("/")
+async def root():
+    # Send visitors who hit the bare root to the setup page. When an admin
+    # already exists, /setup itself forwards on to /login.
+    return RedirectResponse("/setup")
+
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_page(request: Request):
     if auth.has_admin():
