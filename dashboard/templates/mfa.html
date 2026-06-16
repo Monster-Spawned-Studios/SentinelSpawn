@@ -1,19 +1,24 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MFA Verification</title>
-</head>
-<body>
-    <h1>MFA Verification</h1>
-    <p>User: {{ username }}</p>
-    {% if error %}<p role="alert" aria-live="polite">{{ error }}</p>{% endif %}
-    <form method="post" action="/login/mfa">
-        <input type="hidden" name="challenge_id" value="{{ challenge_id }}">
-        <label for="totp_code">TOTP Code</label>
-        <input id="totp_code" type="text" name="totp_code" required><br>
-        <button type="submit">Sign in</button>
-    </form>
-</body>
-</html>
+{% extends "base_auth.html" %}
+{% block title %}Verify{% endblock %}
+{% block heading %}Two-factor verification{% endblock %}
+{% block subtitle %}Enter the 6-digit code from your authenticator app.{% endblock %}
+
+{% block content %}
+<form method="post" action="/login/mfa" autocomplete="off">
+    <input type="hidden" name="challenge_id" value="{{ challenge_id }}">
+    <div class="field">
+        <label for="totp_code">Authentication code{% if username %} &middot; {{ username }}{% endif %}</label>
+        <input id="totp_code" class="input otp-input" type="text" name="totp_code"
+               inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*"
+               maxlength="6" placeholder="000000" required autofocus>
+    </div>
+    <button type="submit" class="btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        Sign in
+    </button>
+    <p class="hint" style="text-align:center;margin-top:16px;">
+        Codes refresh every 30 seconds.
+    </p>
+</form>
+{% endblock %}

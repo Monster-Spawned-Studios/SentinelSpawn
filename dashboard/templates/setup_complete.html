@@ -1,15 +1,51 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Setup Complete</title>
-</head>
-<body>
-    <h1>Setup Complete</h1>
-    <p>Admin account created for {{ username }}.</p>
-    <p>Add this TOTP URI to your authenticator app:</p>
-    <pre>{{ qr_uri }}</pre>
-    <p><a href="/login">Continue to login</a></p>
-</body>
-</html>
+{% extends "base_auth.html" %}
+{% block title %}Setup complete{% endblock %}
+{% block heading %}Almost there, {{ username }}{% endblock %}
+{% block subtitle %}Add this account to your authenticator app to enable two-factor sign-in.{% endblock %}
+
+{% block content %}
+<ol class="steps">
+    <li>Open your authenticator app (Google Authenticator, Authy, 1Password, etc.).</li>
+    <li>Add a new account using the setup key / URI below.</li>
+    <li>Keep the app handy — you'll need a 6-digit code at every login.</li>
+</ol>
+
+<div class="field">
+    <label for="totp_uri">Authenticator setup URI</label>
+    <div class="code-box">
+        <code id="totp_uri">{{ qr_uri }}</code>
+        <button type="button" class="copy-btn" id="copy_uri" data-copy="totp_uri">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span>Copy</span>
+        </button>
+    </div>
+    <p class="hint">Treat this URI like a password — it grants two-factor access.</p>
+</div>
+
+<a class="btn btn-link" href="/login" style="width:100%;">Continue to login</a>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById("copy_uri").addEventListener("click", function () {
+        var el = document.getElementById("totp_uri");
+        var text = el.textContent;
+        var done = this.querySelector("span");
+        var reset = function () { done.textContent = "Copy"; };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+                done.textContent = "Copied!";
+                setTimeout(reset, 1600);
+            });
+        } else {
+            var r = document.createRange();
+            r.selectNodeContents(el);
+            var s = window.getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            try { document.execCommand("copy"); done.textContent = "Copied!"; setTimeout(reset, 1600); } catch (e) {}
+        }
+    });
+</script>
+{% endblock %}
