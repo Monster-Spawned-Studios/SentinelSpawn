@@ -1,19 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-</head>
-<body>
-    <h1>Login</h1>
-    {% if error %}<p role="alert" aria-live="polite">{{ error }}</p>{% endif %}
-    <form method="post" action="/login">
+{% extends "base_auth.html" %}
+{% block title %}Sign in{% endblock %}
+{% block heading %}Welcome back{% endblock %}
+{% block subtitle %}Sign in to the SentinelSpawn Command Center.{% endblock %}
+
+{% block content %}
+<form method="post" action="/login" autocomplete="off">
+    <div class="field">
         <label for="username">Username</label>
-        <input id="username" type="text" name="username" required><br>
+        <input id="username" class="input" type="text" name="username"
+               placeholder="Your username" required autofocus>
+    </div>
+    <div class="field">
         <label for="password">Password</label>
-        <input id="password" type="password" name="password" required><br>
-        <button type="submit">Continue</button>
-    </form>
-</body>
-</html>
+        <div class="input-group">
+            <input id="password" class="input" type="password" name="password"
+                   placeholder="Your password" required>
+            <button type="button" class="toggle-pw" data-target="password"
+                    aria-label="Show password">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+        </div>
+    </div>
+    <button type="submit" class="btn">
+        Continue
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+    </button>
+    <p class="hint" style="text-align:center;margin-top:16px;">
+        Protected by two-factor authentication.
+    </p>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/toggle.js" defer></script>
+{% endblock %}
