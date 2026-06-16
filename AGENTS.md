@@ -52,3 +52,15 @@
 ### Lint / tests
 - No automated test suite and no linter config are committed. `python -m py_compile` on the
   Python sources is a reasonable smoke check.
+
+### Demonstrating / verifying changes (maintainer preference)
+- Do **not** record screen-capture videos to demonstrate work in this repo.
+- Do **not** browser-drive or screenshot the TOTP/MFA login flow for verification. Live TOTP
+  codes rotate every 30s and the flow is flaky to automate, which wastes time/tokens. Leave
+  MFA/TOTP verification to human / editor review.
+- Never add a tool/endpoint that reveals live TOTP codes (e.g. the temporary `:8090` helper a
+  previous agent used) — it is a security risk and must not be committed or run in any shared
+  environment.
+- For automated checks, prefer lightweight terminal verification: `python -m py_compile`,
+  `curl` against non-MFA routes (`/`, `/setup`, `/login`, static assets), and scripted
+  `requests` for redirect/route behavior. Use screenshots sparingly and only when truly needed.
